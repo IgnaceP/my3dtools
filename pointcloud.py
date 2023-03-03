@@ -140,7 +140,8 @@ class PointCloud:
         """
         pca = PCA(n_components=3)
         pcd_pca = pca.fit_transform(self.points)
-        self.points = pcd_pca
+        
+        return PointCloud(points = pcd_pca, colors = self.colors, labels = self.labels)
 
     def cluster(self, technique = 'DBSCAN', param = {'eps':0.015, 'min_samples':10},
                 remove_noise = False, return_cluster_clouds = False, only_keep_core_samples = True,
