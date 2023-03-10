@@ -434,22 +434,35 @@ class PointCloud:
 
         return frontal_area_per_slice
 
-def rotation_matrix_from_vectors(vec1, vec2):
-    """ Find the rotation matrix that aligns vec1 to vec2
-    :param vec1: A 3d "source" vector
-    :param vec2: A 3d "destination" vector
-    :return mat: A transform matrix (3x3) which when applied to vec1, aligns it with vec2.
-    """
-    a, b = (vec1 / np.linalg.norm(vec1)).reshape(3), (vec2 / np.linalg.norm(vec2)).reshape(3)
-    v = np.cross(a, b)
-    c = np.dot(a, b)
-    s = np.linalg.norm(v)
-    kmat = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-    rotation_matrix = np.eye(3) + kmat + kmat.dot(kmat) * ((1 - c) / (s ** 2))
+    def getFrontalArea(self, layer = 0.05, eps = 0.01, min_samples = 100, alpha = 5, ncores = 6):
+	    
+	    slices = self.slice(layer = layer)
+	    frontal_area_per_slice = np.zeros(len(slices))
 
-    #print('v: ', v)
-    #print('c: ', c)
-    #print('s: ', s)
+	    def getAlphashape(i, nclusters, xy, alpha = 5):
+	        print(f'cluster progress: {i}/{nclusters}', end = '\r')
+	        return alphashape(xy, alpha = alpha)
 
-    return rotation_matrix
+
+	    for i,slice in enumerate(slices):
+
+	        print(f'Calculating frontal area per slice: {i}/{len(slices)}')
+
+	        clusters = slice.cluster(technique="DBSCAN", param={'eps': eps, 'min_samples': min_samples}, return_cluster_clouds=True,
+	                                 remove_noise=True)
+	        cluster_XYs = [np.column_stack((c.X, c.Z)) for c in clusters]
+
+	        if ncores == 1:
+	            boxes = [alphashape(xy, alpha = alpha) for xy in cluster_XYs]
+	        else:
+	            pool = PathosPool(ncores)
+	            boxes = pool.map(getAlphashape,
+	                             np.arange(len(cluster_XYs)),
+	                             np.zeros(len(cluster_XYs), dtype = int) + len(cluster_XYs),
+	                             cluster_XYs)
+
+	        slice_frontal_area = np.sum([box.area for box in boxes])
+	        frontal_area_per_slice[i] = slice_frontal_area
+
+	    return frontal_area_per_slice
 
