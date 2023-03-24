@@ -447,22 +447,26 @@ class PointCloud:
 	    for i,slice in enumerate(slices):
 
 	        print(f'Calculating frontal area per slice: {i}/{len(slices)}')
+            print(len(slice.points))
 
-	        clusters = slice.cluster(technique="DBSCAN", param={'eps': eps, 'min_samples': min_samples}, return_cluster_clouds=True,
-	                                 remove_noise=True)
-	        cluster_XYs = [np.column_stack((c.X, c.Z)) for c in clusters]
+            if len(slice.points) > 3:
+                clusters = slice.cluster(technique="DBSCAN", param={'eps': eps, 'min_samples': min_samples}, return_cluster_clouds=True,
+                                         remove_noise=True)
+                cluster_XYs = [np.column_stack((c.X, c.Z)) for c in clusters]
 
-	        if ncores == 1:
-	            boxes = [alphashape(xy, alpha = alpha) for xy in cluster_XYs]
-	        else:
-	            pool = PathosPool(ncores)
-	            boxes = pool.map(getAlphashape,
-	                             np.arange(len(cluster_XYs)),
-	                             np.zeros(len(cluster_XYs), dtype = int) + len(cluster_XYs),
-	                             cluster_XYs)
+                if ncores == 1:
+                    boxes = [alphashape(xy, alpha = alpha) for xy in cluster_XYs]
+                else:
+                    pool = PathosPool(ncores)
+                    boxes = pool.map(getAlphashape,
+                                     np.arange(len(cluster_XYs)),
+                                     np.zeros(len(cluster_XYs), dtype = int) + len(cluster_XYs),
+                                     cluster_XYs)
 
-	        slice_frontal_area = np.sum([box.area for box in boxes])
-	        frontal_area_per_slice[i] = slice_frontal_area
+                slice_frontal_area = np.sum([box.area for box in boxes])
+                frontal_area_per_slice[i] = slice_frontal_area
+            else:
+                frontal_area_per_slice[i] = 0
 
 	    return frontal_area_per_slice
 
