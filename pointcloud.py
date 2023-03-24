@@ -395,79 +395,35 @@ class PointCloud:
 
         return slices
 
-    def getFrontalArea(self, layer=0.05, eps=0.01, min_samples=100, alpha=5, ncores=6):
-        """
-        Method to calculate frontal area
-        :param layer: size of the layers to slice the model into (float, Optional)
-        """
-
-        slices = self.slice(layer=layer)
-        frontal_area_per_slice = np.zeros(len(slices))
-
-        def getAlphashape(i, nclusters, xy, alpha=5):
-            #print(f'cluster progress: {i}/{nclusters}', end='\r')
-            return alphashape(xy, alpha=alpha).area
-
-        for i, slice in enumerate(slices):
-
-            print(f'Calculating frontal area per slice: {i}/{len(slices)}', end = '\r')
-            print(len(slice.points)
+    def getFrontalArea(self, layer = 0.05, eps = 0.01, min_samples = 100, alpha = 5, ncores = 6):
         
-            if len(slice.points) > 0:
-                clusters = slice.cluster(technique="DBSCAN", param={'eps': eps, 'min_samples': min_samples},
-                                         return_cluster_clouds=True,
-                                         remove_noise=True)
+        slices = self.slice(layer = layer)
+        frontal_area_per_slice = np.zeros(len(slices))
+        
+        def getAlphashape(i, nclusters, xy, alpha = 5):
+            #print(f'cluster progress: {i}/{nclusters}', end = '\r')
+            return alphashape(xy, alpha = alpha)
+            
+        for i,slice in enumerate(slices):
+
+            print(f'Calculating frontal area per slice: {i}/{len(slices)}')
+            print(len(slice.points))
+
+            if len(slice.points) > 3:
+                clusters = slice.cluster(technique="DBSCAN", param={'eps': eps, 'min_samples': min_samples}, return_cluster_clouds=True,remove_noise=True)
                 cluster_XYs = [np.column_stack((c.X, c.Z)) for c in clusters]
 
                 if ncores == 1:
-                    boxes = [alphashape(xy, alpha=alpha).area for xy in cluster_XYs]
+                    boxes = [alphashape(xy, alpha = alpha) for xy in cluster_XYs]
                 else:
                     pool = PathosPool(ncores)
-                    boxes = pool.map(getAlphashape,
-                                     np.arange(len(cluster_XYs)),
-                                     np.zeros(len(cluster_XYs), dtype=int) + len(cluster_XYs),
-                                     cluster_XYs)
-
-                slice_frontal_area = np.sum(boxes)
+                    boxes = pool.map(getAlphashape,np.arange(len(cluster_XYs)),np.zeros(len(cluster_XYs), dtype = int) + len(cluster_XYs),cluster_XYs)
+                    
+                slice_frontal_area = np.sum([box.area for box in boxes])
                 frontal_area_per_slice[i] = slice_frontal_area
+            
             else:
                 frontal_area_per_slice[i] = 0
 
         return frontal_area_per_slice
-
-    def getFrontalArea(self, layer = 0.05, eps = 0.01, min_samples = 100, alpha = 5, ncores = 6):
-	    
-	    slices = self.slice(layer = layer)
-	    frontal_area_per_slice = np.zeros(len(slices))
-
-	    def getAlphashape(i, nclusters, xy, alpha = 5):
-	        print(f'cluster progress: {i}/{nclusters}', end = '\r')
-	        return alphashape(xy, alpha = alpha)
-
-
-	    for i,slice in enumerate(slices):
-
-	        print(f'Calculating frontal area per slice: {i}/{len(slices)}')
-                print(len(slice.points))
-
-                if len(slice.points) > 3:
-			clusters = slice.cluster(technique="DBSCAN", param={'eps': eps, 'min_samples': min_samples}, return_cluster_clouds=True,
-						 remove_noise=True)
-			cluster_XYs = [np.column_stack((c.X, c.Z)) for c in clusters]
-
-			if ncores == 1:
-			    boxes = [alphashape(xy, alpha = alpha) for xy in cluster_XYs]
-			else:
-			    pool = PathosPool(ncores)
-			    boxes = pool.map(getAlphashape,
-					     np.arange(len(cluster_XYs)),
-					     np.zeros(len(cluster_XYs), dtype = int) + len(cluster_XYs),
-					     cluster_XYs)
-
-			slice_frontal_area = np.sum([box.area for box in boxes])
-			frontal_area_per_slice[i] = slice_frontal_area
-            else:
-                frontal_area_per_slice[i] = 0
-
-	    return frontal_area_per_slice
 
