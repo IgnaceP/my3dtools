@@ -411,7 +411,8 @@ class PointCloud:
         for i, slice in enumerate(slices):
 
             print(f'Calculating frontal area per slice: {i}/{len(slices)}', end = '\r')
-
+            print(len(slice.points)
+        
             if len(slice.points) > 0:
                 clusters = slice.cluster(technique="DBSCAN", param={'eps': eps, 'min_samples': min_samples},
                                          return_cluster_clouds=True,
