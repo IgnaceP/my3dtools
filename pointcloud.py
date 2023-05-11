@@ -4,7 +4,7 @@ from matplotlib.image import imread
 from mpl_toolkits import mplot3d
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-#from ellipse import LsqEllipse
+from ellipse import LsqEllipse
 from matplotlib.patches import Ellipse
 from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
 import matplotlib as mpl
