@@ -143,6 +143,19 @@ class PointCloud:
         
         return PointCloud(points = pcd_pca, colors = self.colors, labels = self.labels)
 
+    def sample(self, reduction_factor = 100):
+        """
+        Method to reduce the size of a point cloud.
+        :param reduction_factor: only keep 1/reduction_factor of the points
+
+        :return: the reduced point cloud
+        
+        !!! Warning, a lot of points are lost !!!
+        !!! Only use for test purposes !!!
+        """
+
+        return PointCloud(points = self.points[::reduction_factor], colors = self.colors[::reduction_factor], labels = self.labels[::reduction_factor])
+    
     def cluster(self, technique = 'DBSCAN', param = {'eps':0.015, 'min_samples':10},
                 remove_noise = False, return_cluster_clouds = False, only_keep_core_samples = True,
                 only_keep_mainclass = False, dimensions = [0,1,2]):
@@ -372,6 +385,7 @@ class PointCloud:
 
     def removeFloor(self, order = 3, tresh_distance = .05):
 
+        print('Removing floor...',end = '\r')
         # get bottom
         n, bins = np.histogram(self.Z, bins=int(np.max(self.Z) // .01))
         floor = bins[np.argmax(n)]
@@ -384,12 +398,13 @@ class PointCloud:
         dist_mask = ((self.Z - surface) > tresh_distance)
 
         return self.mask(dist_mask)
+        print('Floor Removed!')
 
-    def slice(self, layer = 0.05):
+    def slice(self, layer_size = 0.05):
 
         slices = []
-        for z in np.arange(np.min(self.Z), np.max(self.Z), layer):
-            mask = (self.Z > z)*(self.Z < (z + layer))
+        for z in np.arange(np.min(self.Z), np.max(self.Z), layer_size):
+            mask = (self.Z > z)*(self.Z < (z + layer_size))
             slice = self.mask(mask)
             slices.append(slice)
 
