@@ -283,6 +283,31 @@ class PointCloud:
         print('Ready!')
         return PointCloud(points = self.rotated_points, colors = self.colors, labels = self.labels)
 
+    def rotateWithoutPendulum(self, z_threshold):
+        """
+        Function to rotate a mangrove point cloud if there is no pendulum/lead included
+        all points above z_threshold are considered unimportant noise and can be removed
+        this will increase the difference in variance between the axes (variance of Z axis should be lower than X and Y axes)
+        hence, after PCA, the newly obtained Z axis should better resemble the z-axis
+
+        !!! warning: only works for low mangroves where the vertical dimensions is substantially smaller than the horizontal dimensions
+
+        :param z_threshold: (float, required) z-coordinate above which points are considered irrelevant noise
+
+        :return : rotated point cloud
+        """
+
+        # first PCA
+        pcl_pca1 = pcl.transformPCA()
+
+        # first PCA resulted in first estimation of rotations, now drop all points above the chosen threshold
+        # reapply PCA
+        pcl_pca1_masked = pcl_pca1.mask((pcl_pca1.Z < z_threshold))
+        pcl_pca2 = pcl_pca1_masked.transformPCA()
+
+        return pcl_pca2
+
+
     def mask(self, mask):
         return PointCloud(points=self.points[mask,:], colors=self.colors[mask,:], labels=self.labels[mask])
 
@@ -383,6 +408,27 @@ class PointCloud:
 
         return m
 
+    def getFloor(self, order = 3, tresh_distance = .05, return_surface_fit = False):
+
+        print('Extracting floor...',end = '\r')
+        # get bottom
+        n, bins = np.histogram(self.Z, bins=int(np.max(self.Z) // .01))
+        floor = bins[np.argmax(n)]
+        floor_region = self.mask((self.Z > floor - .25) * (self.Z < floor + .25))
+
+        m = floor_region.fitSurface(order=order)
+        surface = polyval2d(np.column_stack((self.X, self.Y)), m)
+
+        # get mask
+        dist_mask = ((self.Z - surface) < tresh_distance)
+        print('Floor extracted!')
+
+        if return_surface_fit:
+            return self.mask(dist_mask),m
+        else:
+            return self.mask(dist_mask)
+
+
     def removeFloor(self, order = 3, tresh_distance = .05):
 
         print('Removing floor...',end = '\r')
@@ -391,14 +437,15 @@ class PointCloud:
         floor = bins[np.argmax(n)]
         floor_region = self.mask((self.Z > floor - .25) * (self.Z < floor + .25))
 
-        m = floor_region.fitSurface(order=4)
+        m = floor_region.fitSurface(order=order)
         surface = polyval2d(np.column_stack((self.X, self.Y)), m)
 
         # get mask
         dist_mask = ((self.Z - surface) > tresh_distance)
+        print('Floor removed!')
 
         return self.mask(dist_mask)
-        print('Floor Removed!')
+
 
     def slice(self, layer_size = 0.05):
 
