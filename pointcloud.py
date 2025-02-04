@@ -13,9 +13,11 @@ import shapely.affinity
 import shapely
 from copy import deepcopy
 import os
+import pandas as pd
 from polynomial_surface import polyfit2d, polyval2d, RMSE
 from pathos.multiprocessing import ProcessingPool as PathosPool
 from alphashape import alphashape
+from tqdm import tqdm
 
 # class to hold tide data
 #-------------------------------------------------------------
@@ -102,7 +104,7 @@ class PointCloud:
 
         return PointCloud(points = pcd_points_masked, colors = pcd_colors_masked, labels = labels)
 
-    def plot(self, colors = None, ax = None, plot_ax_labels = True,  every_x_point = 1, **kwargs):
+    def plot(self, colors = None, ax = None, plot_ax_labels = True,  every_x_point = 1, aspect = None, **kwargs):
         """
         Method to plot
         :param colors: numpy array of n_points length to color the scatter markers (numpy array, Optional, defaults to the color array)
@@ -122,25 +124,31 @@ class PointCloud:
             ax = plt.axes(projection="3d")
 
         if len(colors.shape) > 1:
-            ax.scatter3D(self.points[::every_x_point, 0], self.points[::every_x_point, 1], self.points[::every_x_point, 2], color=colors[::every_x_point],**kwargs)
+            #ax.scatter3D(self.points[::every_x_point, 0], self.points[::every_x_point, 1], self.points[::every_x_point, 2], color=colors[::every_x_point],**kwargs)
+            ax.scatter(self.points[::every_x_point, 0], self.points[::every_x_point, 1], self.points[::every_x_point, 2], color=colors[::every_x_point],**kwargs)
         else:
             sc = ax.scatter3D(self.points[::every_x_point, 0], self.points[::every_x_point, 1], self.points[::every_x_point, 2], c=colors[::every_x_point], cmap = 'tab20',**kwargs)
+            sc = ax.scatter(self.points[::every_x_point, 0], self.points[::every_x_point, 1], self.points[::every_x_point, 2], c=colors[::every_x_point], cmap = 'tab20',**kwargs)
             fig.colorbar(sc)
 
         if plot_ax_labels:
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.set_zlabel('Z')
-
+        
+        if aspect:
+            ax.set_aspect(aspect)
         return fig, ax
 
-    def transformPCA(self):
+    def transformPCA(self, return_PCA = False):
         """
         Method to transform the coordinates of the points along its principal components
         """
         pca = PCA(n_components=3)
         pcd_pca = pca.fit_transform(self.points)
-        
+
+        if return_PCA:
+            return PointCloud(points = pcd_pca, colors = self.colors, labels = self.labels), pca
         return PointCloud(points = pcd_pca, colors = self.colors, labels = self.labels)
 
     def sample(self, reduction_factor = 100):
@@ -488,4 +496,68 @@ class PointCloud:
                 frontal_area_per_slice[i] = 0
 
         return frontal_area_per_slice
+
+    def computeDTM(self, res=1, bottom_quantile = .05, top_quantile = .95):
+        """
+        Compute the Digital Terrain Model (DTM) and Digital Surface Model (DSM)
+        from a point cloud using quantiles within grid cells.
+
+        Arguments:
+            pcl: PointCloud object
+            res: Resolution for grid cell size (default is 1)
+
+        Returns:
+            DTM: Digital Terrain Model (bottom quantile)
+            DSM: Digital Surface Model (top quantile)
+            DEM: Digital Elevation Model (median quantile)
+            XYZ: Array of points with computed DTM values
+        """
+
+        # Calculate grid dimensions based on resolution
+        cols = int((self.X.max() - self.X.min()) // res) + 1
+        rows = int((self.Y.max() - self.Y.min()) // res) + 1
+
+        # Initialize DTM, DSM, and DEM arrays
+        DTM = np.full([rows, cols], np.nan)
+        DSM = np.full([rows, cols], np.nan)
+        DEM = np.full([rows, cols], np.nan)
+
+        # Calculate grid indices for points
+        x_indices = np.floor((self.X - self.X.min()) / res).astype(int)
+        y_indices = np.floor((self.Y - self.Y.min()) / res).astype(int)
+
+        # Filter valid indices
+        valid_mask = (x_indices >= 0) & (x_indices < cols) & (y_indices >= 0) & (y_indices < rows)
+        x_indices = x_indices[valid_mask]
+        y_indices = y_indices[valid_mask]
+        z_values = self.Z[valid_mask]
+
+        # Accumulate Z-values per grid cell
+        grid_data = {}
+        for x, y, z in zip(x_indices, y_indices, z_values):
+            if (x, y) not in grid_data:
+                grid_data[(x, y)] = []
+            grid_data[(x, y)].append(z)
+
+        # Populate DTM, DSM, and DEM matrices
+        for (x, y), z_vals in tqdm(grid_data.items(), desc='Computing DTM, DSM, DEM'):
+            z_array = np.array(z_vals)
+            DTM[y, x] = np.quantile(z_array, bottom_quantile)
+            DSM[y, x] = np.quantile(z_array, top_quantile)
+            DEM[y, x] = np.median(z_array)
+
+        # Create XYZ array for DTM points
+        X_coords, Y_coords = np.meshgrid(
+            np.arange(cols) * res + self.X.min() + res / 2,
+            np.arange(rows) * res + self.Y.min() + res / 2
+        )
+
+        XYZ = np.column_stack((X_coords.flatten(), Y_coords.flatten(), DTM.flatten()))
+        XYZ = pd.DataFrame(XYZ, columns=['x', 'y', 'z'])
+
+        DEM = np.flip(DEM, axis=0)
+        DTM = np.flip(DTM, axis=0)
+        DSM = np.flip(DSM, axis=0)
+
+        return {'DTM': DTM, 'DSM': DSM, 'DEM': DEM, 'XYZ': XYZ}
 
